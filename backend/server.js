@@ -4,7 +4,14 @@ import { Server as SocketIOServer } from 'socket.io';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+
+// Import custom modules
+import ltiRoutes from './src/lti/routes.js';
+import projectsApi from './src/api/projects.js';
+import yjsServer from './src/websocket/yjs-server.js';
+import { testConnection, syncDatabase } from './src/db/connection.js';
 
 // Load environment variables
 dotenv.config();
@@ -20,8 +27,12 @@ const io = new SocketIOServer(httpServer, {
 });
 
 const PORT = process.env.PORT || 3001;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Middleware
+// ============================================================
+// MIDDLEWARE
+// ============================================================
+
 app.use(helmet());
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
@@ -29,46 +40,146 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cookieParser());
 
 // Rate limiting
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 100,
   message: 'Too many requests from this IP, please try again later.',
 });
 
-// Health check (for Render Keep-Alive GitHub Actions)
+app.use('/api/', apiLimiter);
+
+// ============================================================
+// HEALTH CHECK (for Render Keep-Alive)
+// ============================================================
+
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// API routes (placeholder, will be expanded)
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Backend is running!' });
-});
-
-// WebSocket events (placeholder, will be expanded)
-io.on('connection', (socket) => {
-  console.log(`User connected: ${socket.id}`);
-
-  socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: NODE_ENV,
   });
 });
+
+// ============================================================
+// LTI 1.3 ROUTES
+// ============================================================
+
+// OIDC Discovery
+app.get('/.well-known/openid-configuration', (req, res) => {
+  const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
+  res.json({
+    issuer: baseUrl,
+    authorization_endpoint: `${baseUrl}/lti/auth`,
+    token_endpoint: `${baseUrl}/lti/token`,
+    jwks_uri: `${baseUrl}/.well-known/jwks.json`,
+    response_types_supported: ['id_token'],
+    response_modes_supported: ['form_post'],
+  });
+});
+
+// JWKS endpoint (empty for now, tool doesn't sign tokens)
+app.get('/.well-known/jwks.json', (req, res) => {
+  res.json({ keys: [] });
+});
+
+// LTI routes
+app.use('/lti', ltiRoutes);
+
+// ============================================================
+// REST API ROUTES
+// ============================================================
+
+app.use('/api', projectsApi);
+
+// TEST ENDPOINT
+app.get('/api/test', (req, res) => {
+  res.json({
+    message: 'Backend is running!',
+    environment: NODE_ENV,
+    database: 'Connected',
+  });
+});
+
+// ============================================================
+// WEBSOCKET: YJS COLLABORATION
+// ============================================================
+
+yjsServer.initializeWebSocket(io);
+yjsServer.cleanupUnusedDocuments(io);
+
+// ============================================================
+// ERROR HANDLERS
+// ============================================================
 
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
 });
 
-// Error handler
+// Global error handler
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal Server Error' });
+  console.error('Error:', err.message);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal Server Error',
+  });
 });
 
-// Start server
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📡 WebSocket ready at ws://localhost:${PORT}`);
+// ============================================================
+// STARTUP SEQUENCE
+// ============================================================
+
+async function startup() {
+  try {
+    // Test database connection
+    const dbConnected = await testConnection();
+
+    if (!dbConnected) {
+      console.error('❌ Database connection failed. Exiting.');
+      process.exit(1);
+    }
+
+    // Sync database schema
+    await syncDatabase();
+
+    // Start HTTP/WebSocket server
+    httpServer.listen(PORT, () => {
+      console.log('');
+      console.log('╔════════════════════════════════════════╗');
+      console.log('║   MindMap Moodle LTI Tool Backend      ║');
+      console.log('╚════════════════════════════════════════╝');
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📡 WebSocket ready at ws://localhost:${PORT}`);
+      console.log(`🗄️  Database: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
+      console.log(`🔒 Environment: ${NODE_ENV}`);
+      console.log('');
+      console.log('Available endpoints:');
+      console.log('  GET  /health                 - Health check');
+      console.log('  GET  /.well-known/openid-configuration - OIDC Discovery');
+      console.log('  POST /lti/launch             - LTI 1.3 Launch');
+      console.log('  GET  /api/projects           - List projects');
+      console.log('  POST /api/projects           - Create project');
+      console.log('  GET  /api/projects/:id       - Get project');
+      console.log('  PUT  /api/projects/:id       - Update project');
+      console.log('  DELETE /api/projects/:id     - Delete project');
+      console.log('');
+    });
+  } catch (error) {
+    console.error('❌ Startup error:', error.message);
+    process.exit(1);
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('\n\n🛑 Shutting down gracefully...');
+  httpServer.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
 });
+
+// Start the server
+startup();

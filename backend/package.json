@@ -27,6 +27,7 @@
     "cors": "^2.8.5",
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
+    "cookie-parser": "^1.4.6",
     "axios": "^1.6.7",
     "html2pdf": "^0.10.1",
     "sharp": "^0.33.1"
