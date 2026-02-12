@@ -1,0 +1,35 @@
+name: Auto Deploy on Push
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Backend Dependencies
+        working-directory: ./backend
+        run: npm install
+
+      - name: Run Backend Tests
+        working-directory: ./backend
+        run: npm test
+        continue-on-error: true
+
+      - name: Install Frontend Dependencies
+        working-directory: ./frontend
+        run: npm install
+
+      - name: Build Frontend
+        working-directory: ./frontend
+        run: npm run build

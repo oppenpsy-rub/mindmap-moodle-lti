@@ -1,0 +1,60 @@
+services:
+  - type: web
+    name: mindmap-backend
+    runtime: node
+    plan: free
+    buildCommand: "cd backend && npm install"
+    startCommand: "cd backend && npm start"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3001"
+      - key: DB_HOST
+        fromDatabase:
+          name: mindmap-db
+          property: host
+      - key: DB_USER
+        fromDatabase:
+          name: mindmap-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: mindmap-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: mindmap-db
+          property: database
+      - key: DB_PORT
+        value: "3306"
+      - key: DB_DIALECT
+        value: mysql
+      - key: FRONTEND_URL
+        value: https://mindmap-frontend.vercel.app
+      - key: JWT_SECRET
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: MOODLE_CLIENT_ID
+        sync: false
+      - key: MOODLE_CLIENT_SECRET
+        sync: false
+
+  - type: web
+    name: mindmap-frontend
+    runtime: node
+    plan: free
+    buildCommand: "cd frontend && npm install && npm run build"
+    startCommand: "cd frontend && npm start"
+    envVars:
+      - key: VITE_API_URL
+        value: https://mindmap-backend.onrender.com
+      - key: VITE_WS_URL
+        value: wss://mindmap-backend.onrender.com
+
+databases:
+  - name: mindmap-db
+    databaseName: mindmap
+    user: mindmap_user
+    region: eu-west-1  # EU region for GDPR

@@ -1,0 +1,33 @@
+{
+  "name": "mindmap-moodle-lti-frontend",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Frontend for collaborative MindMap/Whiteboard LTI tool in Moodle",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "socket.io-client": "^4.7.2",
+    "yjs": "^13.6.8",
+    "y-websocket": "^1.5.0",
+    "tldraw": "^2.2.0",
+    "markmap-view": "^0.15.2",
+    "markmap-lib": "^0.15.2",
+    "axios": "^1.6.7",
+    "zustand": "^4.4.7",
+    "classnames": "^2.3.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.7",
+    "vitest": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

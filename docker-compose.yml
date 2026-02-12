@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: mindmap-backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=root
+      - DB_NAME=mindmap_db
+      - DB_DIALECT=mysql
+      - FRONTEND_URL=http://localhost:5173
+      - JWT_SECRET=your_secret_key_here
+      - SESSION_SECRET=your_session_secret_here
+    depends_on:
+      - mysql
+    networks:
+      - mindmap-network
+    volumes:
+      - ./backend/src:/app/src
+
+  frontend:
+    build: ./frontend
+    container_name: mindmap-frontend
+    ports:
+      - "5173:3000"
+    environment:
+      - VITE_API_URL=http://localhost:3001
+      - VITE_WS_URL=ws://localhost:3001
+    depends_on:
+      - backend
+    networks:
+      - mindmap-network
+    volumes:
+      - ./frontend/src:/app/src
+
+  mysql:
+    image: mysql:8.0
+    container_name: mindmap-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=mindmap_db
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - mindmap-network
+
+volumes:
+  mysql_data:
+
+networks:
+  mindmap-network:
+    driver: bridge
