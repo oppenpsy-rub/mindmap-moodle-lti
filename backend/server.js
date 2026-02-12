@@ -137,12 +137,19 @@ async function startup() {
     const dbConnected = await testConnection();
 
     if (!dbConnected) {
-      console.error('❌ Database connection failed. Exiting.');
-      process.exit(1);
+      console.warn('⚠️  Database connection failed. Running in limited mode (API endpoints will fail).');
+      
+      // In development, continue without database
+      if (NODE_ENV !== 'production') {
+        console.log('💡 Tip: Add All-Inkl MySQL credentials to .env to enable database features');
+      } else {
+        console.error('❌ Database required in production. Exiting.');
+        process.exit(1);
+      }
+    } else {
+      // Sync database schema only if connected
+      await syncDatabase();
     }
-
-    // Sync database schema
-    await syncDatabase();
 
     // Start HTTP/WebSocket server
     httpServer.listen(PORT, () => {
@@ -152,7 +159,9 @@ async function startup() {
       console.log('╚════════════════════════════════════════╝');
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📡 WebSocket ready at ws://localhost:${PORT}`);
-      console.log(`🗄️  Database: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
+      if (dbConnected) {
+        console.log(`🗄️  Database: ${process.env.DB_NAME}@${process.env.DB_HOST}`);
+      }
       console.log(`🔒 Environment: ${NODE_ENV}`);
       console.log('');
       console.log('Available endpoints:');
