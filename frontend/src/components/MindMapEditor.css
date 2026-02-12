@@ -1,0 +1,187 @@
+.mindmap-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #f5f5f5;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: white;
+  border-bottom: 1px solid #ddd;
+  flex-wrap: wrap;
+}
+
+.btn-back {
+  padding: 0.5rem 1rem;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 1rem;
+}
+
+.btn-back:hover {
+  background: #e0e0e0;
+}
+
+.project-title {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 1rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.project-title:focus {
+  outline: none;
+  border-color: #0066cc;
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.1);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.connection-status {
+  font-size: 0.9rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.connection-status.disconnected {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.editor-container {
+  display: flex;
+  flex: 1;
+  gap: 0;
+  overflow: hidden;
+}
+
+.editor-textarea {
+  width: 40%;
+  padding: 1rem;
+  border: none;
+  border-right: 1px solid #ddd;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'monospace';
+  font-size: 1rem;
+  resize: none;
+  overflow-y: auto;
+  background: white;
+}
+
+.editor-textarea:focus {
+  outline: none;
+  background: #fafafa;
+}
+
+.mindmap-container {
+  flex: 1;
+  overflow: auto;
+  background: white;
+  position: relative;
+}
+
+.mindmap-container svg {
+  width: 100%;
+  height: 100%;
+}
+
+.active-users {
+  padding: 0.5rem 1rem;
+  background: #f0f7ff;
+  border-top: 1px solid #ddd;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.alert {
+  padding: 1rem;
+  margin: 0.5rem 1rem;
+  border-radius: 4px;
+}
+
+.alert-error {
+  background-color: #fee;
+  color: #c33;
+  border: 1px solid #fcc;
+}
+
+.btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.2s;
+}
+
+.btn-primary {
+  background-color: #0066cc;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0052a3;
+}
+
+.btn-secondary {
+  background-color: #f0f0f0;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.btn-secondary:hover {
+  background-color: #e0e0e0;
+}
+
+.btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .editor-container {
+    flex-direction: column;
+  }
+
+  .editor-textarea {
+    width: 100%;
+    height: 40%;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .mindmap-container {
+    height: 60%;
+  }
+
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .project-title {
+    min-width: unset;
+  }
+
+  .header-actions {
+    justify-content: space-between;
+  }
+}
