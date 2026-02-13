@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 
 // Import custom modules
-import ltiRoutes from './src/lti/routes.js';
+import ltiRoutes, { createSession } from './src/lti/routes.js';
 import projectsApi from './src/api/projects.js';
 import yjsServer from './src/websocket/yjs-server.js';
 import { testConnection, syncDatabase } from './src/db/connection.js';
@@ -89,8 +89,64 @@ app.get('/.well-known/jwks.json', (req, res) => {
 app.use('/lti', ltiRoutes);
 
 // ============================================================
-// REST API ROUTES
+// DEVELOPMENT ENDPOINTS (Development Mode Only)
 // ============================================================
+
+// Development-only: Create mock LTI session for testing
+if (NODE_ENV === 'development') {
+  app.post('/dev/mock-session', (req, res) => {
+    try {
+      // Create a mock user validation object
+      const mockValidation = {
+        userId: `dev_user_${Date.now()}`,
+        name: 'Test Developer',
+        email: 'dev@example.com',
+        ltiClaims: {
+          courseId: 'course_001',
+          courseName: 'Development Course',
+          role: 'Instructor',
+        },
+      };
+
+      // Create session using the exported function
+      const sessionId = createSession(mockValidation);
+      
+      // Set session cookie
+      res.cookie('session_id', sessionId, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'Lax',
+        maxAge: 24 * 60 * 60 * 1000,
+      });
+
+      res.json({
+        success: true,
+        sessionId,
+        user: {
+          userId: mockValidation.userId,
+          name: mockValidation.name,
+          email: mockValidation.email,
+        },
+        message: '✅ Mock session created! You can now use the API.',
+        note: 'Session cookie is set in your browser automatically.',
+      });
+    } catch (error) {
+      console.error('Mock session error:', error);
+      res.status(500).json({ error: 'Failed to create mock session' });
+    }
+  });
+
+  app.get('/dev/mock-session', (req, res) => {
+    res.json({
+      endpoint: 'POST /dev/mock-session',
+      description: 'Creates a mock LTI session for development testing',
+      usage: 'Call this endpoint before accessing /api/* endpoints',
+      curl: 'curl -X POST http://localhost:3001/dev/mock-session -c cookies.txt',
+      then: 'Reload your browser - the dashboard will now work!',
+    });
+  });
+}
+
 
 app.use('/api', projectsApi);
 

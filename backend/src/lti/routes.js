@@ -123,7 +123,7 @@ router.get('/.well-known/jwks.json', (req, res) => {
  */
 const sessions = new Map();
 
-function createSession(validation) {
+export function createSession(validation) {
   const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
   sessions.set(sessionId, {

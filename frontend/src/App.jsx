@@ -14,6 +14,30 @@ function App() {
       `session_${Date.now()}`
   );
 
+  // Initialize development session on mount
+  useEffect(() => {
+    const initializeDevelopmentSession = async () => {
+      // Only in development mode
+      if (import.meta.env.DEV) {
+        try {
+          const response = await fetch(import.meta.env.VITE_API_URL + '/dev/mock-session', {
+            method: 'POST',
+            credentials: 'include',
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('✅ Development session created:', data.sessionId);
+          }
+        } catch (error) {
+          console.debug('Development session not available (may not be in dev mode):', error.message);
+        }
+      }
+    };
+
+    initializeDevelopmentSession();
+  }, []);
+
   const handleProjectSelect = (projectId) => {
     setSelectedProjectId(projectId);
     setView('detail');
