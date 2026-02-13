@@ -101,6 +101,31 @@
   height: 100%;
 }
 
+.preview-pane {
+  flex: 1;
+  overflow: auto;
+  background: #f9f9f9;
+  padding: 1rem;
+  border-left: 1px solid #ddd;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'monospace';
+}
+
+.preview-pane h3 {
+  margin: 0 0 1rem 0;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.preview-pane pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: white;
+  padding: 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
 .active-users {
   padding: 0.5rem 1rem;
   background: #f0f7ff;

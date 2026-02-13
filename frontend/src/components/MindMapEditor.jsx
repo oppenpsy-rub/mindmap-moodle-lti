@@ -1,18 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Markmap } from 'markmap-view';
-import { Transformer } from 'markmap-lib';
 import { useYjsCollaboration } from '../hooks/useYjsCollaboration.js';
 import * as Y from 'yjs';
 import './MindMapEditor.css';
 
 export function MindMapEditor({ projectId, sessionId, onBack }) {
-  const containerRef = useRef(null);
-  const markmapRef = useRef(null);
   const editorRef = useRef(null);
-  const transformerRef = useRef(null);
 
   const [projectName, setProjectName] = useState('Untitled');
-  const [editorContent, setEditorContent] = useState('# New MindMap');
+  const [editorContent, setEditorContent] = useState('# New MindMap\n## Topic 1\n## Topic 2');
   const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
 
@@ -21,11 +16,6 @@ export function MindMapEditor({ projectId, sessionId, onBack }) {
     projectId,
     sessionId
   );
-
-  // Initialize Markmap transformer
-  useEffect(() => {
-    transformerRef.current = new Transformer();
-  }, []);
 
   // Bind Yjs text to editor
   useEffect(() => {
@@ -70,29 +60,6 @@ export function MindMapEditor({ projectId, sessionId, onBack }) {
       yProject.unobserve(projectObserver);
     };
   }, [yjsDoc]);
-
-  // Render Markmap when content changes
-  useEffect(() => {
-    if (!containerRef.current || !transformerRef.current || !editorContent.trim()) {
-      return;
-    }
-
-    try {
-      const { root, features } = transformerRef.current.transform(editorContent);
-      
-      if (markmapRef.current) {
-        markmapRef.current.setData(root);
-        markmapRef.current.fit();
-      } else {
-        markmapRef.current = new Markmap(containerRef.current, null, root);
-      }
-
-      setError(null);
-    } catch (err) {
-      console.error('Markmap rendering error:', err);
-      setError('Failed to render mindmap');
-    }
-  }, [editorContent]);
 
   const handleEditorChange = (e) => {
     const newContent = e.target.value;
@@ -166,7 +133,10 @@ export function MindMapEditor({ projectId, sessionId, onBack }) {
           onChange={handleEditorChange}
           placeholder="# My MindMap&#10;## Topic 1&#10;## Topic 2"
         />
-        <div className="mindmap-container" ref={containerRef} />
+        <div className="preview-pane">
+          <h3>📝 Preview (Plain Text - Markmap coming soon)</h3>
+          <pre>{editorContent}</pre>
+        </div>
       </div>
 
       {users.length > 1 && (

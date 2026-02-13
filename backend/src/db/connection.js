@@ -2,9 +2,14 @@ import { Sequelize } from 'sequelize';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
 
+// Load environment variables in this module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const envPath = path.join(__dirname, '../../.env');
+
+dotenv.config({ path: envPath });
 
 /**
  * Database Connection Setup
@@ -21,6 +26,13 @@ try {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
   };
+
+  // Debug logging
+  console.log('📋 Environment Variables Loaded:');
+  console.log(`  DB_HOST: ${process.env.DB_HOST ? '✓' : '✗'}`);
+  console.log(`  DB_USER: ${process.env.DB_USER ? '✓' : '✗'}`);
+  console.log(`  DB_PASSWORD: ${process.env.DB_PASSWORD ? '✓' : '✗'}`);
+  console.log(`  DB_NAME: ${process.env.DB_NAME ? '✓' : '✗'}`);
 
   console.log(`🔌 Connecting to MySQL database: ${dbConfig.user}@${dbConfig.host}/${dbConfig.database}`);
 
