@@ -13,42 +13,46 @@ dotenv.config({ path: envPath });
 
 /**
  * Database Connection Setup
- * Connects to All-Inkl MySQL database
+ * Supports both SQLite (local development) and MySQL (production)
  */
 
 let sequelize;
 
 try {
-  const dbConfig = {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 3306,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  };
+  const dialect = process.env.DB_DIALECT || 'sqlite';
+  console.log(`🗄️  Database Dialect: ${dialect}`);
+  console.log(`📋 Database Config:`);
+  console.log(`  DB_NAME: ${process.env.DB_NAME || 'Not set'}`);
+  console.log(`  DB_HOST: ${process.env.DB_HOST || '(SQLite - N/A)'}`);
 
-  // Debug logging
-  console.log('📋 Environment Variables Loaded:');
-  console.log(`  DB_HOST: ${process.env.DB_HOST ? '✓' : '✗'}`);
-  console.log(`  DB_USER: ${process.env.DB_USER ? '✓' : '✗'}`);
-  console.log(`  DB_PASSWORD: ${process.env.DB_PASSWORD ? '✓' : '✗'}`);
-  console.log(`  DB_NAME: ${process.env.DB_NAME ? '✓' : '✗'}`);
-
-  console.log(`🔌 Connecting to MySQL database: ${dbConfig.user}@${dbConfig.host}/${dbConfig.database}`);
-
-  sequelize = new Sequelize(dbConfig.database, dbConfig.user, dbConfig.password, {
-    host: dbConfig.host,
-    port: dbConfig.port,
-    dialect: process.env.DB_DIALECT || 'mysql',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000,
-    },
-    timezone: '+00:00', // UTC
-  });
+  if (dialect === 'sqlite') {
+    // SQLite configuration for local development
+    const dbPath = path.join(__dirname, '../../', process.env.DB_NAME || 'database.db');
+    console.log(`📁 SQLite Database Path: ${dbPath}`);
+    
+    sequelize = new Sequelize({
+      dialect: 'sqlite',
+      storage: dbPath,
+      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    });
+  } else {
+    // MySQL/MariaDB configuration for production
+    console.log(`🔌 Connecting to ${dialect}: ${process.env.DB_USER}@${process.env.DB_HOST}/${process.env.DB_NAME}`);
+    
+    sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT || 3306,
+      dialect: dialect,
+      logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      pool: {
+        max: 5,
+        min: 0,
+        acquire: 30000,
+        idle: 10000,
+      },
+      timezone: '+00:00', // UTC
+    });
+  }
 } catch (error) {
   console.error('❌ Database connection error:', error.message);
   process.exit(1);
