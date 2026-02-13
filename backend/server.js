@@ -111,14 +111,18 @@ if (NODE_ENV === 'development') {
       // Create session using the exported function
       const sessionId = createSession(mockValidation);
       
-      // Set session cookie
+      // Set session cookie with explicit path and domain
       res.cookie('session_id', sessionId, {
+        path: '/',
         httpOnly: true,
         secure: false,
         sameSite: 'Lax',
         maxAge: 24 * 60 * 60 * 1000,
       });
 
+      console.log('✅ Mock session created:', sessionId);
+      console.log('   User:', mockValidation.userId);
+      
       res.json({
         success: true,
         sessionId,
