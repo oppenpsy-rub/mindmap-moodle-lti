@@ -50,6 +50,17 @@ router.post('/projects', async (req, res) => {
     const { name, description } = req.body;
     const userId = req.session.userId;
 
+    // Ensure user exists in database (required for foreign key)
+    await User.findOrCreate({
+      where: { id: userId },
+      defaults: {
+        moodleUserId: userId,
+        name: req.session.name || 'User',
+        email: req.session.email || null,
+        role: req.session.role || 'student',
+      },
+    });
+
     const projectId = uuidv4();
 
     const project = await Project.create({

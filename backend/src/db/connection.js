@@ -34,6 +34,15 @@ try {
       dialect: 'sqlite',
       storage: dbPath,
       logging: process.env.NODE_ENV === 'development' ? console.log : false,
+      define: {
+        timestamps: true,
+        underscored: false,
+      },
+      // Enable foreign key support for SQLite
+      dialectOptions: {
+        // This enables foreign key constraints
+        foreign_keys: true,
+      },
     });
   } else {
     // MySQL/MariaDB configuration for production
@@ -65,6 +74,13 @@ async function testConnection() {
   try {
     await sequelize.authenticate();
     console.log('✅ Database connection successful!');
+    
+    // Enable foreign key constraints for SQLite
+    if (process.env.DB_DIALECT === 'sqlite') {
+      await sequelize.query('PRAGMA foreign_keys = ON');
+      console.log('✅ Foreign key constraints enabled for SQLite');
+    }
+    
     return true;
   } catch (error) {
     console.error('❌ Unable to connect to database:', error.message);
