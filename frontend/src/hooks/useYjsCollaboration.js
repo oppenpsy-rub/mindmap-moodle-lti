@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
 import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
 import io from 'socket.io-client';
 
 /**

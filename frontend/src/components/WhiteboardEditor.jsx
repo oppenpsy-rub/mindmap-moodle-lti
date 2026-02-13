@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { TldrawApp, ColorStyle, tDraw } from 'tldraw';
-import 'tldraw/tldraw.css';
 import { useYjsCollaboration } from '../hooks/useYjsCollaboration.js';
 import * as Y from 'yjs';
 import './WhiteboardEditor.css';
 
 export function WhiteboardEditor({ projectId, sessionId, onBack }) {
   const rContainer = useRef(null);
-  const rTldrawApp = useRef(null);
+  const rCanvasRef = useRef(null);
+  const rDrawing = useRef(false);
+  const rShapes = useRef([]);
+  const rLastX = useRef(0);
+  const rLastY = useRef(0);
   const [projectName, setProjectName] = useState('Untitled');
   const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
+  const [drawMode, setDrawMode] = useState('pen');
+  const [color, setColor] = useState('#000000');
 
   // Initialize Yjs collaboration
   const { yjsDoc, connected } = useYjsCollaboration(
@@ -18,55 +22,68 @@ export function WhiteboardEditor({ projectId, sessionId, onBack }) {
     sessionId
   );
 
-  // Initialize tldraw app
+  // Initialize canvas
   useEffect(() => {
     if (!rContainer.current || !yjsDoc) return;
 
-    const yShapes = yjsDoc.getMap('whiteboard-shapes');
-    const yProject = yjsDoc.getMap('project');
-    let isUpdatingFromYjs = false;
+    const canvas = document.createElement('canvas');
+    canvas.width = rContainer.current.offsetWidth;
+    canvas.height = rContainer.current.offsetHeight;
+    canvas.className = 'whiteboard-canvas';
+    
+    rContainer.current.appendChild(canvas);
+    rCanvasRef.current = canvas;
 
-    // Initialize tldraw
-    const app = new TldrawApp();
-    rTldrawApp.current = app;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Fill background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Set up drawing interactions
+    canvas.addEventListener('mousedown', (e) => {
+      rDrawing.current = true;
+      const rect = canvas.getBoundingClientRect();
+      rLastX.current = e.clientX - rect.left;
+      rLastY.current = e.clientY - rect.top;
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!rDrawing.current) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(rLastX.current, rLastY.current);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+
+      rLastX.current = x;
+      rLastY.current = y;
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      rDrawing.current = false;
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      rDrawing.current = false;
+    });
 
     // Load initial data from Yjs
+    const yProject = yjsDoc.getMap('project');
     const initialName = yProject.get('name');
     if (initialName) {
       setProjectName(initialName);
     }
 
-    const initialShapes = yShapes.toJSON();
-    if (Object.keys(initialShapes).length > 0) {
-      // Load shapes into tldraw
-      app.loadAppState(initialShapes);
-    }
-
-    // Subscribe to remote shape changes
-    const shapesObserver = (event) => {
-      if (isUpdatingFromYjs) return;
-      
-      event.keysChanged.forEach((key) => {
-        const shape = yShapes.get(key);
-        if (shape) {
-          app.updateShapes([shape], true);
-        }
-      });
-
-      event.added.forEach((item) => {
-        const key = item.content.getKey();
-        const shape = yShapes.get(key);
-        if (shape) {
-          app.createShapes([shape]);
-        }
-      });
-
-      event.deleted.forEach((item) => {
-        const key = item.content.getKey();
-        app.deleteShapes([key]);
-      });
-    };
-
+    // Subscribe to remote changes
     const projectObserver = (event) => {
       event.keysChanged.forEach((key) => {
         if (key === 'name') {
@@ -75,34 +92,15 @@ export function WhiteboardEditor({ projectId, sessionId, onBack }) {
       });
     };
 
-    yShapes.observe(shapesObserver);
     yProject.observe(projectObserver);
 
-    // Listen to tldraw changes and sync to Yjs
-    const handleChangeV2 = (state, reason) => {
-      if (reason === 'config-change' || reason === 'session-tick') {
-        return;
-      }
-
-      isUpdatingFromYjs = true;
-      const appState = app.appState;
-      const newShapes = app.shapes;
-
-      newShapes.forEach((shape) => {
-        yShapes.set(shape.id, shape);
-      });
-
-      isUpdatingFromYjs = false;
-    };
-
-    app.on('change-v2', handleChangeV2);
-
     return () => {
-      yShapes.unobserve(shapesObserver);
       yProject.unobserve(projectObserver);
-      app.off('change-v2', handleChangeV2);
+      if (rContainer.current && canvas.parentNode === rContainer.current) {
+        rContainer.current.removeChild(canvas);
+      }
     };
-  }, [yjsDoc]);
+  }, [yjsDoc, color]);
 
   const handleNameChange = (e) => {
     const newName = e.target.value;
@@ -114,21 +112,23 @@ export function WhiteboardEditor({ projectId, sessionId, onBack }) {
     }
   };
 
-  const handleExport = () => {
-    if (!rTldrawApp.current) return;
-
-    const app = rTldrawApp.current;
-    const svg = app.getSvg(app.selectedIds);
-    
-    if (svg) {
-      const element = document.createElement('a');
-      const file = new Blob([svg.outerHTML], { type: 'image/svg+xml' });
-      element.href = URL.createObjectURL(file);
-      element.download = `${projectName}.svg`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
+  const handleClear = () => {
+    const canvas = rCanvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
+  };
+
+  const handleExport = () => {
+    const canvas = rCanvasRef.current;
+    if (!canvas) return;
+
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `${projectName}.png`;
+    link.click();
   };
 
   return (
@@ -148,8 +148,18 @@ export function WhiteboardEditor({ projectId, sessionId, onBack }) {
           <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
             {connected ? '● Connected' : '○ Reconnecting...'}
           </span>
+          <select value={color} onChange={(e) => setColor(e.target.value)} className="color-picker">
+            <option value="#000000">Black</option>
+            <option value="#FF0000">Red</option>
+            <option value="#0000FF">Blue</option>
+            <option value="#00AA00">Green</option>
+            <option value="#FF6600">Orange</option>
+          </select>
+          <button className="btn btn-sm btn-secondary" onClick={handleClear}>
+            Clear
+          </button>
           <button className="btn btn-sm btn-secondary" onClick={handleExport}>
-            Export SVG
+            Export PNG
           </button>
         </div>
       </div>
