@@ -25,7 +25,7 @@ export function useYjsCollaboration(projectId, sessionId) {
         const doc = new Y.Doc();
 
         // Connect to backend via WebSocket
-        const socket = io(process.env.VITE_WS_URL, {
+        const socket = io(import.meta.env.VITE_WS_URL, {
           query: { sessionId },
           reconnection: true,
           reconnectionDelay: 1000,
