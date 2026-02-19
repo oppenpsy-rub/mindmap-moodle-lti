@@ -6,6 +6,11 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import custom modules
 import ltiRoutes, { createSession } from './src/lti/routes.js';
@@ -170,10 +175,26 @@ yjsServer.cleanupUnusedDocuments(io);
 // ERROR HANDLERS
 // ============================================================
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not Found' });
-});
+// ============================================================
+// STATIC FRONTEND (Production)
+// ============================================================
+
+if (NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, '..', 'frontend', 'dist');
+  app.use(express.static(frontendPath));
+
+  // SPA fallback: serve index.html for all non-API routes
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
+}
+
+// 404 handler (only in dev, production uses SPA fallback)
+if (NODE_ENV !== 'production') {
+  app.use((req, res) => {
+    res.status(404).json({ error: 'Not Found' });
+  });
+}
 
 // Global error handler
 app.use((err, req, res, next) => {
