@@ -39,7 +39,23 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // MIDDLEWARE
 // ============================================================
 
-app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+  // Allow iframe embedding (required for LTI tools in Moodle)
+  frameguard: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'blob:'],
+      connectSrc: ["'self'", 'wss:', 'ws:'],
+      frameSrc: ["'self'"],
+      frameAncestors: ['*'],  // Allow Moodle to embed us
+    },
+  },
+}));
 app.use(cors({
   origin: function (origin, callback) {
     const allowed = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'];
@@ -93,37 +109,38 @@ app.use('/lti', ltiRoutes);
 // DEVELOPMENT ENDPOINTS (Development Mode Only)
 // ============================================================
 
-// Development-only: Create mock LTI session for testing
-if (NODE_ENV === 'development') {
+// Demo/Dev mode: Create mock LTI session for testing
+// Active in development OR when DEMO_MODE=true in production
+const DEMO_MODE = process.env.DEMO_MODE === 'true';
+
+if (NODE_ENV === 'development' || DEMO_MODE) {
+  if (DEMO_MODE) console.log('🎭 DEMO MODE active — mock sessions available without Moodle');
+
   app.post('/dev/mock-session', (req, res) => {
     try {
-      // Create a mock user validation object
       const mockValidation = {
-        userId: `dev_user_${Date.now()}`,
-        name: 'Test Developer',
-        email: 'dev@example.com',
+        userId: `demo_user_${Date.now()}`,
+        name: DEMO_MODE ? 'Demo User' : 'Test Developer',
+        email: 'demo@example.com',
         ltiClaims: {
           courseId: 'course_001',
-          courseName: 'Development Course',
+          courseName: DEMO_MODE ? 'Demo Course' : 'Development Course',
           role: 'Instructor',
         },
       };
 
-      // Create session using the exported function
       const sessionId = createSession(mockValidation);
-      
-      // Set session cookie with explicit path and domain
+
       res.cookie('session_id', sessionId, {
         path: '/',
         httpOnly: true,
-        secure: false,
-        sameSite: 'Lax',
+        secure: NODE_ENV === 'production',
+        sameSite: NODE_ENV === 'production' ? 'None' : 'Lax',
         maxAge: 24 * 60 * 60 * 1000,
       });
 
       console.log('✅ Mock session created:', sessionId);
-      console.log('   User:', mockValidation.userId);
-      
+
       res.json({
         success: true,
         sessionId,
@@ -132,8 +149,6 @@ if (NODE_ENV === 'development') {
           name: mockValidation.name,
           email: mockValidation.email,
         },
-        message: '✅ Mock session created! You can now use the API.',
-        note: 'Session cookie is set in your browser automatically.',
       });
     } catch (error) {
       console.error('Mock session error:', error);
@@ -141,14 +156,9 @@ if (NODE_ENV === 'development') {
     }
   });
 
-  app.get('/dev/mock-session', (req, res) => {
-    res.json({
-      endpoint: 'POST /dev/mock-session',
-      description: 'Creates a mock LTI session for development testing',
-      usage: 'Call this endpoint before accessing /api/* endpoints',
-      curl: 'curl -X POST http://localhost:3001/dev/mock-session -c cookies.txt',
-      then: 'Reload your browser - the dashboard will now work!',
-    });
+  // Info endpoint for demo status
+  app.get('/dev/status', (req, res) => {
+    res.json({ demoMode: true });
   });
 }
 

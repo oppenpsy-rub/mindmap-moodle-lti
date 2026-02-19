@@ -11,57 +11,78 @@ function App() {
   const [sessionError, setSessionError] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [userName, setUserName] = useState('');
+  const [demoAvailable, setDemoAvailable] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Helper: create a demo/mock session
+  const createDemoSession = async () => {
+    setLoading(true);
+    setSessionError(null);
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${apiBase}/dev/mock-session`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setSessionId(data.sessionId);
+        setUserName(data.user?.name || 'Demo User');
+        setSessionReady(true);
+      } else {
+        throw new Error(`Status ${response.status}`);
+      }
+    } catch (error) {
+      setSessionError('Demo-Session konnte nicht erstellt werden: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let retryCount = 0;
-    const maxRetries = 5;
-    let retryTimer = null;
-
     const initSession = async () => {
       const params = new URLSearchParams(window.location.search);
       const urlSession = params.get('session') || params.get('session_id');
 
+      // 1. Session from URL (LTI launch redirect)
       if (urlSession) {
         setSessionId(urlSession);
         setSessionReady(true);
+        setLoading(false);
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
         return;
       }
 
+      // 2. Dev mode: auto-create mock session
       if (import.meta.env.DEV) {
-        try {
-          const response = await fetch('/dev/mock-session', {
-            method: 'POST',
-            credentials: 'include',
-          });
-          if (response.ok) {
-            const data = await response.json();
-            setSessionId(data.sessionId);
-            setUserName(data.user?.name || 'Developer');
-            setSessionReady(true);
-            setSessionError(null);
-            retryCount = 0;
-          } else {
-            throw new Error(`Server antwortet mit Status ${response.status}`);
-          }
-        } catch (error) {
-          retryCount++;
-          if (retryCount <= maxRetries) {
-            const delay = Math.min(2000 * retryCount, 10000);
-            setSessionError(`Verbinde mit Backend... (Versuch ${retryCount}/${maxRetries})`);
-            retryTimer = setTimeout(initSession, delay);
-          } else {
-            setSessionError('Backend nicht erreichbar. Bitte starte den Backend-Server (node server.js im backend-Ordner).');
+        await createDemoSession();
+        return;
+      }
+
+      // 3. Production: check if demo mode is active
+      try {
+        const apiBase = import.meta.env.VITE_API_URL || '';
+        const statusRes = await fetch(`${apiBase}/dev/status`, { credentials: 'include' });
+        if (statusRes.ok) {
+          const statusData = await statusRes.json();
+          if (statusData.demoMode) {
+            setDemoAvailable(true);
+            // Auto-login in demo mode
+            await createDemoSession();
+            return;
           }
         }
-      } else {
-        setSessionError('Kein LTI-Session gefunden. Bitte über Moodle starten.');
+      } catch {
+        // Not in demo mode, that's fine
       }
-    };
-    initSession();
 
-    return () => {
-      if (retryTimer) clearTimeout(retryTimer);
+      // 4. No session available
+      setSessionError('Kein LTI-Session gefunden. Bitte über Moodle starten.');
+      setLoading(false);
     };
+
+    initSession();
   }, []);
 
   const handleOpenBoard = (board) => {
@@ -78,16 +99,26 @@ function App() {
     return (
       <div className="app">
         <div className="app-loading">
-          {sessionError ? (
+          {loading ? (
             <>
+              <div className="spinner" />
               <h2>Verbindung wird hergestellt...</h2>
-              <p>{sessionError}</p>
+            </>
+          ) : sessionError ? (
+            <>
+              <h2>MoodBoard</h2>
+              <p style={{ color: '#888', marginBottom: 16 }}>{sessionError}</p>
+              {demoAvailable && (
+                <button
+                  onClick={createDemoSession}
+                  style={{ marginTop: 8, padding: '10px 24px', cursor: 'pointer', borderRadius: 8, border: 'none', background: 'var(--color-primary, #6366f1)', color: '#fff', fontSize: 15, fontWeight: 600 }}
+                >
+                  Demo starten
+                </button>
+              )}
               <button
-                onClick={() => {
-                  setSessionError(null);
-                  window.location.reload();
-                }}
-                style={{ marginTop: 16, padding: '8px 20px', cursor: 'pointer', borderRadius: 8, border: 'none', background: 'var(--color-primary, #6366f1)', color: '#fff', fontSize: 14 }}
+                onClick={() => window.location.reload()}
+                style={{ marginTop: 12, padding: '8px 20px', cursor: 'pointer', borderRadius: 8, border: '1px solid #ddd', background: 'transparent', color: '#666', fontSize: 14 }}
               >
                 Erneut versuchen
               </button>
