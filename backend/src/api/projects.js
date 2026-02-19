@@ -31,7 +31,7 @@ router.get('/projects', async (req, res) => {
         createdBy: userId,
       },
       order: [['updatedAt', 'DESC']],
-      attributes: ['id', 'name', 'description', 'courseId', 'createdBy', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'description', 'boardType', 'courseId', 'createdBy', 'createdAt', 'updatedAt'],
     });
 
     res.json(projects);
@@ -47,7 +47,7 @@ router.get('/projects', async (req, res) => {
  */
 router.post('/projects', async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, boardType } = req.body;
     const userId = req.session.userId;
 
     // Ensure user exists in database (required for foreign key)
@@ -65,8 +65,9 @@ router.post('/projects', async (req, res) => {
 
     const project = await Project.create({
       id: projectId,
-      name: name || 'New Project',
+      name: name || 'New Board',
       description: description || '',
+      boardType: boardType || 'mindmap',
       courseId: req.session.courseId || null,
       createdBy: userId,
     });

@@ -56,6 +56,11 @@ export const Project = sequelize.define('Project', {
     type: DataTypes.STRING(36),
     allowNull: false,
   },
+  boardType: {
+    type: DataTypes.ENUM('mindmap', 'whiteboard'),
+    defaultValue: 'mindmap',
+    allowNull: false,
+  },
   isPublic: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,

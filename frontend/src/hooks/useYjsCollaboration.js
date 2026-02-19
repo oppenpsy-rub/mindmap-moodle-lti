@@ -1,159 +1,89 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import * as Y from 'yjs';
 import io from 'socket.io-client';
 
-/**
- * Custom hook for Yjs collaboration
- * Handles WebSocket connection, document sync, and user awareness
- */
 export function useYjsCollaboration(projectId, sessionId) {
   const [yjsDoc, setYjsDoc] = useState(null);
   const [connected, setConnected] = useState(false);
   const [users, setUsers] = useState([]);
-  const [error, setError] = useState(null);
   const socketRef = useRef(null);
-  const providerRef = useRef(null);
+  const docRef = useRef(null);
 
   useEffect(() => {
-    if (!projectId || !sessionId) {
-      return;
-    }
+    if (!projectId || !sessionId) return;
 
-    const initializeCollaboration = async () => {
-      try {
-        // Create new Yjs document
-        const doc = new Y.Doc();
+    const doc = new Y.Doc();
+    docRef.current = doc;
 
-        // Connect to backend via WebSocket
-        const socket = io(import.meta.env.VITE_WS_URL, {
-          query: { sessionId },
-          reconnection: true,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          reconnectionAttempts: 5,
+    const socket = io(import.meta.env.VITE_WS_URL || 'http://localhost:3001', {
+      query: { sessionId },
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      reconnectionAttempts: 10,
+    });
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      setConnected(true);
+      socket.emit('join-project', { projectId, sessionId });
+    });
+
+    socket.on('yjs-state', (data) => {
+      if (data.state && data.state.length > 0) {
+        Y.applyUpdate(doc, new Uint8Array(data.state), 'remote');
+      }
+      setUsers(data.users || []);
+      setYjsDoc(doc);
+    });
+
+    socket.on('yjs-update', (data) => {
+      if (data.update && data.update.length > 0) {
+        Y.applyUpdate(doc, new Uint8Array(data.update), 'remote');
+      }
+    });
+
+    socket.on('user-joined', (data) => {
+      setUsers((prev) => [...prev.filter(u => u.userId !== data.userId), {
+        userId: data.userId,
+        name: data.name,
+        socketId: data.socketId,
+      }]);
+    });
+
+    socket.on('error', (data) => {
+      console.error('WS error:', data.message);
+      setConnected(false);
+    });
+
+    socket.on('disconnect', () => setConnected(false));
+    socket.on('reconnect', () => setConnected(true));
+
+    // Send local updates to server
+    const updateHandler = (update, origin) => {
+      if (origin !== 'remote' && socket.connected) {
+        socket.emit('yjs-update', {
+          projectId,
+          update: Array.from(update),
         });
-
-        socketRef.current = socket;
-
-        // Handle connection
-        socket.on('connect', () => {
-          console.log('WebSocket connected:', socket.id);
-          setConnected(true);
-          setError(null);
-
-          // Request to join project
-          socket.emit('join-project', {
-            projectId,
-            sessionId,
-          });
-        });
-
-        // Handle initial Yjs state
-        socket.on('yjs-state', (data) => {
-          console.log('Received initial Yjs state');
-
-          // Apply received state
-          if (data.state && data.state.length > 0) {
-            Y.applyUpdate(doc, new Uint8Array(data.state));
-          }
-
-          setUsers(data.users || []);
-          setYjsDoc(doc);
-        });
-
-        // Handle remote Yjs updates
-        socket.on('yjs-update', (data) => {
-          if (data.update && data.update.length > 0) {
-            Y.applyUpdate(doc, new Uint8Array(data.update));
-          }
-        });
-
-        // Handle user awareness
-        socket.on('user-joined', (data) => {
-          console.log(`User joined: ${data.name}`);
-          setUsers((prev) => [
-            ...prev,
-            {
-              userId: data.userId,
-              name: data.name,
-              socketId: data.socketId,
-            },
-          ]);
-        });
-
-        socket.on('cursor-update', (data) => {
-          // Handle cursor positions for awareness
-          // TODO: Update UI to show remote cursors
-        });
-
-        // Handle errors
-        socket.on('error', (data) => {
-          console.error('WebSocket error:', data.message);
-          setError(data.message);
-          setConnected(false);
-        });
-
-        // Handle disconnect
-        socket.on('disconnect', () => {
-          console.log('WebSocket disconnected');
-          setConnected(false);
-        });
-
-        // Reconnect handler
-        socket.on('reconnect', () => {
-          console.log('WebSocket reconnected');
-          setConnected(true);
-        });
-      } catch (err) {
-        console.error('Collaboration setup error:', err);
-        setError(err.message);
       }
     };
+    doc.on('update', updateHandler);
 
-    initializeCollaboration();
-
-    // Cleanup
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      if (providerRef.current) {
-        providerRef.current.destroy();
-      }
+      doc.off('update', updateHandler);
+      // Stop reconnection attempts before disconnecting
+      socket.io.opts.reconnection = false;
+      socket.removeAllListeners();
+      socket.disconnect();
+      socketRef.current = null;
+      doc.destroy();
+      docRef.current = null;
+      setConnected(false);
+      setYjsDoc(null);
+      setUsers([]);
     };
   }, [projectId, sessionId]);
 
-  // Send local Yjs updates to other users
-  const sendUpdate = (update) => {
-    if (socketRef.current && connected) {
-      socketRef.current.emit('yjs-update', {
-        projectId,
-        update: Array.from(update),
-      });
-    }
-  };
-
-  // Send cursor position
-  const sendCursor = (x, y, selection) => {
-    if (socketRef.current && connected) {
-      socketRef.current.emit('cursor-move', {
-        projectId,
-        x,
-        y,
-        selection,
-      });
-    }
-  };
-
-  return {
-    yjsDoc,
-    connected,
-    users,
-    error,
-    sendUpdate,
-    sendCursor,
-    socket: socketRef.current,
-  };
+  return { yjsDoc, connected, users };
 }
-
-export default useYjsCollaboration;

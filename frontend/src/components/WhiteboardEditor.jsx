@@ -1,182 +1,301 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useCallback, useEffect, useRef, lazy, Suspense } from 'react';
 import { useYjsCollaboration } from '../hooks/useYjsCollaboration.js';
-import * as Y from 'yjs';
 import './WhiteboardEditor.css';
 
-export function WhiteboardEditor({ projectId, sessionId, onBack }) {
-  const rContainer = useRef(null);
-  const rCanvasRef = useRef(null);
-  const rDrawing = useRef(false);
-  const rShapes = useRef([]);
-  const rLastX = useRef(0);
-  const rLastY = useRef(0);
-  const [projectName, setProjectName] = useState('Untitled');
-  const [users, setUsers] = useState([]);
-  const [error, setError] = useState(null);
-  const [drawMode, setDrawMode] = useState('pen');
-  const [color, setColor] = useState('#000000');
+// Lazy-load tldraw; falls back to custom canvas if unavailable
+const TldrawWrapper = lazy(() =>
+  import('tldraw').then((mod) => {
+    // Also import its CSS
+    import('tldraw/tldraw.css');
+    return { default: ({ projectId }) => <mod.Tldraw persistenceKey={`wb-${projectId}`} /> };
+  }).catch(() => {
+    return { default: () => null }; // will trigger fallback
+  })
+);
 
-  // Initialize Yjs collaboration
-  const { yjsDoc, connected } = useYjsCollaboration(
-    projectId,
-    sessionId
-  );
+// ─── Fallback Canvas Whiteboard ───────────────────────────
+function FallbackCanvas({ yjsDoc }) {
+  const canvasRef = useRef(null);
+  const ctxRef = useRef(null);
+  const isDrawing = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
+  const [tool, setTool] = useState('pen');
+  const [color, setColor] = useState('#1e293b');
+  const [lineWidth, setLineWidth] = useState(2);
+  const [shapes, setShapes] = useState([]);
+  const currentPath = useRef([]);
 
-  // Initialize canvas
   useEffect(() => {
-    if (!rContainer.current || !yjsDoc) return;
-
-    const canvas = document.createElement('canvas');
-    canvas.width = rContainer.current.offsetWidth;
-    canvas.height = rContainer.current.offsetHeight;
-    canvas.className = 'whiteboard-canvas';
-    
-    rContainer.current.appendChild(canvas);
-    rCanvasRef.current = canvas;
-
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const container = canvas.parentElement;
+    canvas.width = container.offsetWidth;
+    canvas.height = container.offsetHeight;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    ctxRef.current = ctx;
+    redraw(ctx, canvas);
 
-    // Fill background
+    const handleResize = () => {
+      canvas.width = container.offsetWidth;
+      canvas.height = container.offsetHeight;
+      redraw(ctx, canvas);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const ctx = ctxRef.current;
+    const canvas = canvasRef.current;
+    if (ctx && canvas) redraw(ctx, canvas);
+  }, [shapes]);
+
+  const redraw = (ctx, canvas) => {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Set up drawing interactions
-    canvas.addEventListener('mousedown', (e) => {
-      rDrawing.current = true;
-      const rect = canvas.getBoundingClientRect();
-      rLastX.current = e.clientX - rect.left;
-      rLastY.current = e.clientY - rect.top;
-    });
+    // Draw grid
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < canvas.width; x += 30) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    }
+    for (let y = 0; y < canvas.height; y += 30) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
 
-    canvas.addEventListener('mousemove', (e) => {
-      if (!rDrawing.current) return;
-      const rect = canvas.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
+    // Draw shapes
+    shapes.forEach((shape) => {
+      ctx.strokeStyle = shape.color;
+      ctx.lineWidth = shape.lineWidth;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
-      ctx.beginPath();
-      ctx.moveTo(rLastX.current, rLastY.current);
-      ctx.lineTo(x, y);
-      ctx.stroke();
 
-      rLastX.current = x;
-      rLastY.current = y;
-    });
-
-    canvas.addEventListener('mouseup', () => {
-      rDrawing.current = false;
-    });
-
-    canvas.addEventListener('mouseleave', () => {
-      rDrawing.current = false;
-    });
-
-    // Load initial data from Yjs
-    const yProject = yjsDoc.getMap('project');
-    const initialName = yProject.get('name');
-    if (initialName) {
-      setProjectName(initialName);
-    }
-
-    // Subscribe to remote changes
-    const projectObserver = (event) => {
-      event.keysChanged.forEach((key) => {
-        if (key === 'name') {
-          setProjectName(yProject.get('name') || 'Untitled');
+      if (shape.type === 'path' && shape.points.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(shape.points[0].x, shape.points[0].y);
+        for (let i = 1; i < shape.points.length; i++) {
+          ctx.lineTo(shape.points[i].x, shape.points[i].y);
         }
-      });
-    };
-
-    yProject.observe(projectObserver);
-
-    return () => {
-      yProject.unobserve(projectObserver);
-      if (rContainer.current && canvas.parentNode === rContainer.current) {
-        rContainer.current.removeChild(canvas);
+        ctx.stroke();
+      } else if (shape.type === 'rect') {
+        ctx.strokeRect(shape.x, shape.y, shape.w, shape.h);
+      } else if (shape.type === 'circle') {
+        ctx.beginPath();
+        const r = Math.sqrt(shape.w * shape.w + shape.h * shape.h) / 2;
+        ctx.arc(shape.x + shape.w / 2, shape.y + shape.h / 2, r, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (shape.type === 'sticky') {
+        ctx.fillStyle = shape.color;
+        ctx.fillRect(shape.x, shape.y, 160, 120);
+        ctx.strokeStyle = '#00000020';
+        ctx.strokeRect(shape.x, shape.y, 160, 120);
+        ctx.fillStyle = '#1e293b';
+        ctx.font = '14px Inter, sans-serif';
+        ctx.fillText(shape.text || 'Note', shape.x + 12, shape.y + 30);
       }
-    };
-  }, [yjsDoc, color]);
+    });
+  };
 
-  const handleNameChange = (e) => {
-    const newName = e.target.value;
-    setProjectName(newName);
+  const getPos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  };
 
-    if (yjsDoc) {
-      const yProject = yjsDoc.getMap('project');
-      yProject.set('name', newName);
+  const handleDown = (e) => {
+    const pos = getPos(e);
+
+    if (tool === 'sticky') {
+      const text = prompt('Sticky note text:', 'Note');
+      if (text) {
+        setShapes([...shapes, {
+          type: 'sticky', x: pos.x, y: pos.y,
+          color: '#fef3c7', text, lineWidth: 1,
+        }]);
+      }
+      return;
     }
+
+    isDrawing.current = true;
+    lastPos.current = pos;
+    currentPath.current = [pos];
   };
 
-  const handleClear = () => {
-    const canvas = rCanvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const handleMove = (e) => {
+    if (!isDrawing.current) return;
+    const pos = getPos(e);
+    const ctx = ctxRef.current;
+
+    if (tool === 'pen' || tool === 'eraser') {
+      ctx.strokeStyle = tool === 'eraser' ? '#ffffff' : color;
+      ctx.lineWidth = tool === 'eraser' ? 20 : lineWidth;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(lastPos.current.x, lastPos.current.y);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+      currentPath.current.push(pos);
     }
+
+    lastPos.current = pos;
   };
 
-  const handleExport = () => {
-    const canvas = rCanvasRef.current;
-    if (!canvas) return;
+  const handleUp = () => {
+    if (!isDrawing.current) return;
+    isDrawing.current = false;
 
-    const link = document.createElement('a');
-    link.href = canvas.toDataURL('image/png');
-    link.download = `${projectName}.png`;
-    link.click();
+    if (tool === 'pen' && currentPath.current.length > 1) {
+      setShapes([...shapes, {
+        type: 'path', points: currentPath.current,
+        color, lineWidth,
+      }]);
+    } else if (tool === 'rect' || tool === 'circle') {
+      const start = currentPath.current[0];
+      const end = lastPos.current;
+      setShapes([...shapes, {
+        type: tool, x: Math.min(start.x, end.x), y: Math.min(start.y, end.y),
+        w: Math.abs(end.x - start.x), h: Math.abs(end.y - start.y),
+        color, lineWidth,
+      }]);
+    }
+
+    currentPath.current = [];
   };
+
+  const clearCanvas = () => {
+    setShapes([]);
+    const ctx = ctxRef.current;
+    const canvas = canvasRef.current;
+    if (ctx && canvas) redraw(ctx, canvas);
+  };
+
+  const TOOLS = [
+    { id: 'pen', icon: '✏️', label: 'Pen' },
+    { id: 'eraser', icon: '🧹', label: 'Eraser' },
+    { id: 'rect', icon: '⬜', label: 'Rectangle' },
+    { id: 'circle', icon: '⭕', label: 'Circle' },
+    { id: 'sticky', icon: '📝', label: 'Sticky Note' },
+  ];
+
+  const PALETTE = ['#1e293b', '#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
 
   return (
-    <div className="whiteboard-editor">
-      <div className="editor-header">
-        <button className="btn btn-back" onClick={onBack}>
-          ← Back
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      {/* Tool bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px',
+        borderBottom: '1px solid var(--color-border)', background: '#fff',
+      }}>
+        {TOOLS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTool(t.id)}
+            style={{
+              padding: '6px 10px', border: 'none', borderRadius: 6,
+              background: tool === t.id ? 'var(--color-primary-light)' : 'transparent',
+              color: tool === t.id ? 'var(--color-primary)' : 'var(--color-text-secondary)',
+              cursor: 'pointer', fontSize: 16, fontFamily: 'var(--font-sans)',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}
+            title={t.label}
+          >
+            {t.icon} <span style={{ fontSize: 12 }}>{t.label}</span>
+          </button>
+        ))}
+
+        <span style={{ width: 1, height: 24, background: 'var(--color-border)', margin: '0 4px' }} />
+
+        {PALETTE.map((c) => (
+          <div
+            key={c}
+            onClick={() => setColor(c)}
+            style={{
+              width: 22, height: 22, borderRadius: 4, background: c, cursor: 'pointer',
+              border: color === c ? '2px solid var(--color-text)' : '2px solid transparent',
+            }}
+          />
+        ))}
+
+        <span style={{ width: 1, height: 24, background: 'var(--color-border)', margin: '0 4px' }} />
+
+        <select
+          value={lineWidth}
+          onChange={(e) => setLineWidth(Number(e.target.value))}
+          style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid var(--color-border)', fontSize: 12 }}
+        >
+          <option value={1}>Thin</option>
+          <option value={2}>Normal</option>
+          <option value={4}>Thick</option>
+          <option value={8}>Bold</option>
+        </select>
+
+        <button
+          onClick={clearCanvas}
+          style={{
+            marginLeft: 'auto', padding: '4px 12px', border: '1px solid var(--color-border)',
+            borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 12,
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          Clear
         </button>
-        <input
-          type="text"
-          className="project-title"
-          value={projectName}
-          onChange={handleNameChange}
-          placeholder="Project name"
-        />
-        <div className="header-actions">
-          <span className={`connection-status ${connected ? 'connected' : 'disconnected'}`}>
-            {connected ? '● Connected' : '○ Reconnecting...'}
-          </span>
-          <select value={color} onChange={(e) => setColor(e.target.value)} className="color-picker">
-            <option value="#000000">Black</option>
-            <option value="#FF0000">Red</option>
-            <option value="#0000FF">Blue</option>
-            <option value="#00AA00">Green</option>
-            <option value="#FF6600">Orange</option>
-          </select>
-          <button className="btn btn-sm btn-secondary" onClick={handleClear}>
-            Clear
-          </button>
-          <button className="btn btn-sm btn-secondary" onClick={handleExport}>
-            Export PNG
-          </button>
-        </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <div className="canvas-container" ref={rContainer} />
-
-      {users.length > 1 && (
-        <div className="active-users">
-          <small>
-            {users.length} people editing: {users.map((u) => u.name).join(', ')}
-          </small>
-        </div>
-      )}
+      {/* Canvas */}
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <canvas
+          ref={canvasRef}
+          style={{ position: 'absolute', inset: 0, cursor: tool === 'sticky' ? 'crosshair' : 'default' }}
+          onMouseDown={handleDown}
+          onMouseMove={handleMove}
+          onMouseUp={handleUp}
+          onMouseLeave={handleUp}
+        />
+      </div>
     </div>
   );
 }
 
-export default WhiteboardEditor;
+// ─── Error Boundary for tldraw ────────────────────────────
+class TldrawErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error) { console.warn('tldraw failed to load:', error); }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}
+
+// ─── Main Whiteboard Component ────────────────────────────
+export default function WhiteboardEditor({ projectId, projectName, sessionId, onBack }) {
+  const [name, setName] = useState(projectName || 'Untitled');
+  const { yjsDoc, connected } = useYjsCollaboration(projectId, sessionId);
+
+  return (
+    <div className="whiteboard-editor">
+      {/* Header */}
+      <div className="wb-header">
+        <button className="wb-back" onClick={onBack} title="Back to dashboard">←</button>
+        <input
+          className="wb-title-input"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Board name"
+        />
+        <div className="wb-header-right">
+          <div className={`wb-status ${connected ? 'online' : 'offline'}`}>
+            <span className="wb-status-dot" />
+            {connected ? 'Connected' : 'Offline'}
+          </div>
+        </div>
+      </div>
+
+      {/* Canvas */}
+      <div className="wb-canvas-container">
+        <Suspense fallback={<FallbackCanvas yjsDoc={yjsDoc} />}>
+          <TldrawErrorBoundary fallback={<FallbackCanvas yjsDoc={yjsDoc} />}>
+            <TldrawWrapper projectId={projectId} />
+          </TldrawErrorBoundary>
+        </Suspense>
+      </div>
+    </div>
+  );
+}

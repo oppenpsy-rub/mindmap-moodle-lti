@@ -103,12 +103,12 @@ class YjsServer {
 
       console.log(`👤 User ${session.name} joined project ${projectId}`);
 
-      // Log action
-      await AuditLog.create({
+      // Log action (non-blocking - don't let DB errors break WebSocket)
+      AuditLog.create({
         projectId,
         userId: session.userId,
         action: 'joined',
-      });
+      }).catch(err => console.warn('AuditLog write failed:', err.message));
     } catch (error) {
       console.error('handleJoinProject error:', error);
       socket.emit('error', { message: 'Failed to join project' });
@@ -147,13 +147,13 @@ class YjsServer {
         userName: user.name,
       });
 
-      // Log significant actions
-      await AuditLog.create({
+      // Log significant actions (non-blocking)
+      AuditLog.create({
         projectId,
         userId: user.userId,
         action: 'edited',
         details: { updateSize: updateBuffer.length },
-      });
+      }).catch(err => console.warn('AuditLog write failed:', err.message));
     } catch (error) {
       console.error('handleYjsUpdate error:', error);
     }

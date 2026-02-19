@@ -2,89 +2,100 @@ import React, { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard.jsx';
 import MindMapEditor from './components/MindMapEditor.jsx';
 import WhiteboardEditor from './components/WhiteboardEditor.jsx';
-import ProjectDetail from './components/ProjectDetail.jsx';
 import './App.css';
 
 function App() {
   const [view, setView] = useState('dashboard');
-  const [selectedProjectId, setSelectedProjectId] = useState(null);
-  const [selectedEditorType, setSelectedEditorType] = useState(null);
+  const [selectedBoard, setSelectedBoard] = useState(null);
   const [sessionReady, setSessionReady] = useState(false);
   const [sessionError, setSessionError] = useState(null);
-  const [sessionId] = useState(
-    new URLSearchParams(window.location.search).get('session_id') ||
-      `session_${Date.now()}`
-  );
+  const [sessionId, setSessionId] = useState(null);
+  const [userName, setUserName] = useState('');
 
-  // Initialize development session on mount
   useEffect(() => {
-    const initializeDevelopmentSession = async () => {
-      // Only in development mode
+    let retryCount = 0;
+    const maxRetries = 5;
+    let retryTimer = null;
+
+    const initSession = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const urlSession = params.get('session') || params.get('session_id');
+
+      if (urlSession) {
+        setSessionId(urlSession);
+        setSessionReady(true);
+        return;
+      }
+
       if (import.meta.env.DEV) {
         try {
-          const response = await fetch(import.meta.env.VITE_API_URL + '/dev/mock-session', {
+          const response = await fetch('/dev/mock-session', {
             method: 'POST',
             credentials: 'include',
           });
-          
           if (response.ok) {
             const data = await response.json();
-            console.log('✅ Development session created:', data.sessionId);
+            setSessionId(data.sessionId);
+            setUserName(data.user?.name || 'Developer');
             setSessionReady(true);
             setSessionError(null);
+            retryCount = 0;
           } else {
-            throw new Error(`Server responded with status ${response.status}`);
+            throw new Error(`Server antwortet mit Status ${response.status}`);
           }
         } catch (error) {
-          console.error('❌ Failed to initialize session:', error.message);
-          setSessionError(error.message);
-          setSessionReady(false);
+          retryCount++;
+          if (retryCount <= maxRetries) {
+            const delay = Math.min(2000 * retryCount, 10000);
+            setSessionError(`Verbinde mit Backend... (Versuch ${retryCount}/${maxRetries})`);
+            retryTimer = setTimeout(initSession, delay);
+          } else {
+            setSessionError('Backend nicht erreichbar. Bitte starte den Backend-Server (node server.js im backend-Ordner).');
+          }
         }
       } else {
-        // Production mode - assume session is handled by LTI login
-        setSessionReady(true);
+        setSessionError('Kein LTI-Session gefunden. Bitte über Moodle starten.');
       }
     };
+    initSession();
 
-    initializeDevelopmentSession();
+    return () => {
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
-  const handleProjectSelect = (projectId) => {
-    setSelectedProjectId(projectId);
-    setView('detail');
-  };
-
-  const handleEditorSelect = (editorType) => {
-    setSelectedEditorType(editorType);
-    setView('editor');
+  const handleOpenBoard = (board) => {
+    setSelectedBoard(board);
+    setView(board.boardType === 'whiteboard' ? 'whiteboard' : 'mindmap');
   };
 
   const handleBackToDashboard = () => {
     setView('dashboard');
-    setSelectedProjectId(null);
-    setSelectedEditorType(null);
+    setSelectedBoard(null);
   };
 
-  const handleCloseDetail = () => {
-    setView('dashboard');
-    setSelectedProjectId(null);
-  };
-
-  // Show loading or error state while initializing session
   if (!sessionReady) {
     return (
       <div className="app">
-        <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div className="app-loading">
           {sessionError ? (
             <>
-              <h2>❌ Session Error</h2>
+              <h2>Verbindung wird hergestellt...</h2>
               <p>{sessionError}</p>
-              <p>Please check that the backend is running at {import.meta.env.VITE_API_URL}</p>
+              <button
+                onClick={() => {
+                  setSessionError(null);
+                  window.location.reload();
+                }}
+                style={{ marginTop: 16, padding: '8px 20px', cursor: 'pointer', borderRadius: 8, border: 'none', background: 'var(--color-primary, #6366f1)', color: '#fff', fontSize: 14 }}
+              >
+                Erneut versuchen
+              </button>
             </>
           ) : (
             <>
-              <h2>Initializing...</h2>
-              <p>Setting up development session...</p>
+              <div className="spinner" />
+              <h2>Connecting...</h2>
             </>
           )}
         </div>
@@ -95,31 +106,26 @@ function App() {
   return (
     <div className="app">
       {view === 'dashboard' && (
-        <Dashboard 
-          onProjectSelect={handleProjectSelect} 
+        <Dashboard
+          onOpenBoard={handleOpenBoard}
           sessionId={sessionId}
+          userName={userName}
         />
       )}
-      
-      {view === 'detail' && selectedProjectId && (
-        <ProjectDetail
-          projectId={selectedProjectId}
-          onClose={handleCloseDetail}
-          onEditorSelect={handleEditorSelect}
-        />
-      )}
-      
-      {view === 'editor' && selectedProjectId && selectedEditorType === 'mindmap' && (
+
+      {view === 'mindmap' && selectedBoard && (
         <MindMapEditor
-          projectId={selectedProjectId}
+          projectId={selectedBoard.id}
+          projectName={selectedBoard.name}
           sessionId={sessionId}
           onBack={handleBackToDashboard}
         />
       )}
 
-      {view === 'editor' && selectedProjectId && selectedEditorType === 'whiteboard' && (
+      {view === 'whiteboard' && selectedBoard && (
         <WhiteboardEditor
-          projectId={selectedProjectId}
+          projectId={selectedBoard.id}
+          projectName={selectedBoard.name}
           sessionId={sessionId}
           onBack={handleBackToDashboard}
         />

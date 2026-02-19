@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 
 // Import custom modules
 import ltiRoutes, { createSession } from './src/lti/routes.js';
+import ltiHandler from './src/lti/handler.js';
 import projectsApi from './src/api/projects.js';
 import yjsServer from './src/websocket/yjs-server.js';
 import { testConnection, syncDatabase } from './src/db/connection.js';
@@ -33,9 +34,17 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // MIDDLEWARE
 // ============================================================
 
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
+  origin: function (origin, callback) {
+    const allowed = process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'];
+    // Allow requests with no origin (mobile apps, curl, same-origin proxy)
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // In dev, allow all origins
+    }
+  },
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
@@ -67,25 +76,12 @@ app.get('/health', (req, res) => {
 // LTI 1.3 ROUTES
 // ============================================================
 
-// OIDC Discovery
-app.get('/.well-known/openid-configuration', (req, res) => {
-  const baseUrl = process.env.API_URL || `http://localhost:${PORT}`;
-  res.json({
-    issuer: baseUrl,
-    authorization_endpoint: `${baseUrl}/lti/auth`,
-    token_endpoint: `${baseUrl}/lti/token`,
-    jwks_uri: `${baseUrl}/.well-known/jwks.json`,
-    response_types_supported: ['id_token'],
-    response_modes_supported: ['form_post'],
-  });
-});
-
-// JWKS endpoint (empty for now, tool doesn't sign tokens)
+// JWKS endpoint (tool's public keys)
 app.get('/.well-known/jwks.json', (req, res) => {
-  res.json({ keys: [] });
+  res.json(ltiHandler.getToolJWKS());
 });
 
-// LTI routes
+// LTI routes (login, launch, jwks, config, info)
 app.use('/lti', ltiRoutes);
 
 // ============================================================
@@ -193,6 +189,9 @@ app.use((err, req, res, next) => {
 
 async function startup() {
   try {
+    // Initialize LTI key pair
+    await ltiHandler.initializeKeys();
+
     // Test database connection
     const dbConnected = await testConnection();
 
@@ -215,7 +214,7 @@ async function startup() {
     httpServer.listen(PORT, () => {
       console.log('');
       console.log('╔════════════════════════════════════════╗');
-      console.log('║   MindMap Moodle LTI Tool Backend      ║');
+      console.log('║        MoodBoard — Backend              ║');
       console.log('╚════════════════════════════════════════╝');
       console.log(`🚀 Server running on http://localhost:${PORT}`);
       console.log(`📡 WebSocket ready at ws://localhost:${PORT}`);
@@ -248,6 +247,24 @@ process.on('SIGINT', () => {
     console.log('✅ Server closed');
     process.exit(0);
   });
+});
+
+// Prevent crashes from unhandled errors
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️  Unhandled Promise Rejection:', reason);
+  // Don't exit - keep running
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('⚠️  Uncaught Exception:', error.message);
+  console.error(error.stack);
+  // Don't exit for recoverable errors
+  if (error.code === 'ECONNRESET' || error.code === 'EPIPE' || error.code === 'ETIMEDOUT') {
+    console.log('↪  Recoverable error, continuing...');
+  } else {
+    console.error('❌ Fatal error, shutting down...');
+    process.exit(1);
+  }
 });
 
 // Start the server

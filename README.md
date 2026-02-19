@@ -1,6 +1,6 @@
-# 🧠 MindMap & Whiteboard Collaboration Tool for Moodle (LTI)
+# 🧠 MoodBoard — Kollaboratives Board-Tool für Moodle
 
-A modern, real-time collaborative MindMap and Whiteboard editor integrated with Moodle via LTI 1.3. Built with React, Node.js, Yjs CRDT, and WebSockets for seamless collaboration without requiring separate login.
+MoodBoard ist ein modernes, kollaboratives Mindmap- und Whiteboard-Tool, integriert in Moodle über LTI 1.3. Gebaut mit React, Node.js, Yjs CRDT und WebSockets für Echtzeit-Zusammenarbeit ohne separaten Login.
 
 ## ✨ Features
 
@@ -36,8 +36,8 @@ A modern, real-time collaborative MindMap and Whiteboard editor integrated with 
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/yourusername/mindmap-moodle-lti.git
-cd mindmap-moodle-lti
+git clone https://github.com/yourusername/moodboard.git
+cd moodboard
 ```
 
 ### 2. Setup Environment Variables
@@ -175,7 +175,7 @@ Quick summary:
 ```bash
 # On RUB server
 git clone <repo>
-cd mindmap-moodle-lti
+cd moodboard
 docker-compose up -d
 ```
 

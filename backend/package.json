@@ -1,7 +1,7 @@
 {
-  "name": "mindmap-moodle-lti-backend",
+  "name": "moodboard-backend",
   "version": "0.1.0",
-  "description": "Backend for collaborative MindMap/Whiteboard LTI tool in Moodle",
+  "description": "MoodBoard — Kollaboratives Mindmap- und Whiteboard-Tool für Moodle",
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -27,6 +27,7 @@
     "express": "^4.18.2",
     "express-rate-limit": "^6.7.0",
     "helmet": "^7.0.0",
+    "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.0",
     "mysql2": "^3.6.0",
     "sequelize": "^6.32.2",

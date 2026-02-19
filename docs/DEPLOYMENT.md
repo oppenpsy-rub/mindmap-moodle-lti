@@ -39,7 +39,7 @@ All-Inkl MySQL (Database)
    - Go to [render.com](https://render.com)
    - Click "New +" → "Web Service"
    - Connect GitHub repository
-   - Select repository: `mindmap-moodle-lti`
+   - Select repository: `moodboard`
    - Build command: `cd backend && npm install`
    - Start command: `cd backend && npm start`
 
@@ -53,7 +53,7 @@ All-Inkl MySQL (Database)
      DB_USER=your_mysql_user
      DB_PASSWORD=your_mysql_password
      DB_NAME=your_database_name
-     FRONTEND_URL=https://mindmap-frontend.vercel.app
+     FRONTEND_URL=https://moodboard.vercel.app
      ...
      ```
 
@@ -66,7 +66,7 @@ All-Inkl MySQL (Database)
 1. **Create Vercel Project**
    - Go to [vercel.com](https://vercel.com)
    - Click "Add New..." → "Project"
-   - Import GitHub repository: `mindmap-moodle-lti`
+   - Import GitHub repository: `moodboard`
    - Root Directory: `frontend`
 
 2. **Set Environment Variables in Vercel**
@@ -148,8 +148,8 @@ psql -U postgres -d mindmap_db < backup.sql
 ssh user@rub-server.de
 
 # Clone repository
-git clone https://github.com/yourusername/mindmap-moodle-lti.git
-cd mindmap-moodle-lti
+git clone https://github.com/yourusername/moodboard.git
+cd moodboard
 
 # Create .env file
 cp backend/.env.example backend/.env

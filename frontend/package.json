@@ -1,5 +1,5 @@
 {
-  "name": "mindmap-moodle-lti-frontend",
+  "name": "moodboard-frontend",
   "version": "0.1.0",
   "type": "module",
   "description": "Frontend for collaborative MindMap/Whiteboard LTI tool in Moodle",
